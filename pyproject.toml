@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ble-mcp"
+version = "0.1.0"
+description = "MCP server for BLE scanning and GATT enumeration in IoT security testing"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=1.0.0",
+    "bleak>=0.21.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = [
+    "bluetooth: requires Bluetooth hardware",
+]
