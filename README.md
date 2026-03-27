@@ -83,6 +83,10 @@ Pi 5 onboard Bluetooth
 - No subprocesses needed (unlike mitm-mcp). All BLE operations happen in-process via bleak's async API.
 - Standard Bluetooth SIG UUIDs are resolved to human-readable names via `gatt_names.py`.
 
+## Project Integration
+
+The `connect` tool accepts an optional `project_path` parameter. When provided (from project-mcp's `create_project`), engagement data is written to `<project_path>/ble/` instead of creating a standalone folder. Omit it for standalone use.
+
 ## Known Constraints
 
 - **Single connection:** the Pi's onboard Bluetooth can maintain one or a small number of concurrent BLE connections. The MVP supports one at a time.
