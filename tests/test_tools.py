@@ -134,7 +134,7 @@ class TestConnect:
         result = await tool_connect(manager, "AA:BB:CC:DD:EE:FF", "smart-lock")
 
         manager.connect.assert_awaited_once_with(
-            address="AA:BB:CC:DD:EE:FF", engagement_name="smart-lock"
+            address="AA:BB:CC:DD:EE:FF", engagement_name="smart-lock", project_path=None
         )
         assert result["connection_id"] == "abc12345"
         assert "engagement_path" in result

@@ -119,17 +119,24 @@ class ConnectionManager:
         self,
         address: str,
         engagement_name: str,
+        project_path: str | None = None,
     ) -> str | None:
         """Connect to a BLE device, create engagement folder. Returns conn_id or None."""
-        sanitized = _sanitize_name(engagement_name)
-        timestamp = datetime.now().strftime("%d-%m-%Y-%H-%M")
-        folder_name = f"{timestamp}_BLE_{sanitized}"
-        engagement_path = self._engagements_dir / folder_name
-        counter = 1
-        while engagement_path.exists():
-            folder_name = f"{timestamp}_BLE_{sanitized}-{counter}"
+        if project_path is not None:
+            resolved = Path(project_path).resolve()
+            if not resolved.is_relative_to(self._engagements_dir.resolve()):
+                raise ValueError("project_path must be under engagements directory")
+            engagement_path = resolved / "ble"
+        else:
+            sanitized = _sanitize_name(engagement_name)
+            timestamp = datetime.now().strftime("%d-%m-%Y-%H-%M")
+            folder_name = f"{timestamp}_BLE_{sanitized}"
             engagement_path = self._engagements_dir / folder_name
-            counter += 1
+            counter = 1
+            while engagement_path.exists():
+                folder_name = f"{timestamp}_BLE_{sanitized}-{counter}"
+                engagement_path = self._engagements_dir / folder_name
+                counter += 1
 
         client = BleakClient(address, timeout=10.0)
         try:
