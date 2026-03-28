@@ -271,7 +271,10 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
 
 async def main():
     async with stdio_server() as (read_stream, write_stream):
-        await app.run(read_stream, write_stream, app.create_initialization_options())
+        try:
+            await app.run(read_stream, write_stream, app.create_initialization_options())
+        finally:
+            await connection_manager.close_all()
 
 
 if __name__ == "__main__":

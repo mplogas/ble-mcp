@@ -173,9 +173,20 @@ class ConnectionManager:
 
     async def disconnect(self, conn_id: str) -> None:
         """Disconnect a BLE device. Raises KeyError if not found."""
-        conn = self._connections.pop(conn_id)
-        await conn.client.disconnect()
+        conn = self._connections[conn_id]
+        try:
+            await conn.client.disconnect()
+        finally:
+            self._connections.pop(conn_id, None)
         log.info("Disconnected %s", conn_id)
+
+    async def close_all(self) -> None:
+        """Disconnect all active BLE connections. Called on shutdown."""
+        for conn_id in list(self._connections.keys()):
+            try:
+                await self.disconnect(conn_id)
+            except Exception:
+                pass
 
     def get(self, conn_id: str) -> dict[str, Any] | None:
         """Get connection info. Returns None if not found."""
@@ -266,8 +277,10 @@ class ConnectionManager:
             })
 
         await conn.client.start_notify(char_uuid, _on_notify)
-        await asyncio.sleep(duration)
-        await conn.client.stop_notify(char_uuid)
+        try:
+            await asyncio.sleep(duration)
+        finally:
+            await conn.client.stop_notify(char_uuid)
 
         # Write notifications to JSONL log
         log_path = conn.engagement_path / "logs" / "ble-notifications.jsonl"
