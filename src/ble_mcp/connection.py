@@ -111,8 +111,10 @@ class ConnectionManager:
 
         scanner = BleakScanner(detection_callback=_callback)
         await scanner.start()
-        await asyncio.sleep(duration)
-        await scanner.stop()
+        try:
+            await asyncio.sleep(duration)
+        finally:
+            await scanner.stop()
         return records
 
     async def connect(
