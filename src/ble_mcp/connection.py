@@ -50,9 +50,26 @@ class ConnectionManager:
     All bleak usage is confined to this class. Tools never import bleak.
     """
 
+    # Hard caps to bound resource usage and prevent runaway jobs.
+    MAX_DURATION_SECONDS = 300
+    MAX_CONNECTIONS = 5
+    MAX_NOTIFICATIONS = 10000
+
     def __init__(self, engagements_dir: Path) -> None:
         self._engagements_dir = engagements_dir
         self._connections: dict[str, _Connection] = {}
+
+    @classmethod
+    def _clamp_duration(cls, duration: float) -> float:
+        if duration <= 0:
+            return 0.0
+        if duration > cls.MAX_DURATION_SECONDS:
+            log.warning(
+                "Clamping BLE duration from %.1fs to %ds",
+                duration, cls.MAX_DURATION_SECONDS,
+            )
+            return float(cls.MAX_DURATION_SECONDS)
+        return float(duration)
 
     async def scan(
         self,
@@ -60,6 +77,7 @@ class ConnectionManager:
         name_filter: str | None = None,
     ) -> list[dict[str, Any]]:
         """Scan for BLE devices. Returns list sorted by RSSI descending."""
+        duration = self._clamp_duration(duration)
         discovered = await BleakScanner.discover(
             timeout=duration, return_adv=True
         )
@@ -88,6 +106,7 @@ class ConnectionManager:
         device_filter: str | None = None,
     ) -> list[dict[str, Any]]:
         """Monitor BLE advertisements for a duration, returning timestamped records."""
+        duration = self._clamp_duration(duration)
         records: list[dict[str, Any]] = []
 
         def _callback(device: Any, adv: Any) -> None:
@@ -123,7 +142,19 @@ class ConnectionManager:
         engagement_name: str,
         project_path: str | None = None,
     ) -> str | None:
-        """Connect to a BLE device, create engagement folder. Returns conn_id or None."""
+        """Connect to a BLE device, create engagement folder. Returns conn_id or None.
+
+        Rejects new connections once MAX_CONNECTIONS are already open; the Pi's
+        BlueZ stack is unreliable under heavy concurrent load and each stuck
+        connection ties up a device slot.
+        """
+        if len(self._connections) >= self.MAX_CONNECTIONS:
+            log.warning(
+                "Refusing to connect to %s: %d connections already open (max %d)",
+                address, len(self._connections), self.MAX_CONNECTIONS,
+            )
+            return None
+
         sanitized = _sanitize_name(engagement_name)
         timestamp = datetime.now().strftime("%d-%m-%Y-%H-%M")
 
@@ -258,11 +289,28 @@ class ConnectionManager:
         char_uuid: str,
         duration: float = 30.0,
     ) -> list[dict[str, Any]]:
-        """Subscribe to notifications for a duration. Saves to logs/ble-notifications.jsonl."""
+        """Subscribe to notifications for a duration. Saves to logs/ble-notifications.jsonl.
+
+        In-memory notification list is capped at MAX_NOTIFICATIONS to avoid
+        runaway memory growth on chatty devices. All notifications are still
+        streamed to the JSONL log up to the cap; beyond that, the cap is
+        annotated in the JSONL and the in-memory list stops growing.
+        """
+        duration = self._clamp_duration(duration)
         conn = self._connections[conn_id]
         notifications: list[dict[str, Any]] = []
+        cap_hit = False
 
         def _on_notify(_handle: int, data: bytearray) -> None:
+            nonlocal cap_hit
+            if len(notifications) >= self.MAX_NOTIFICATIONS:
+                if not cap_hit:
+                    cap_hit = True
+                    log.warning(
+                        "Notification cap (%d) hit on %s; dropping further records",
+                        self.MAX_NOTIFICATIONS, char_uuid,
+                    )
+                return
             try:
                 text = data.decode("utf-8")
             except (UnicodeDecodeError, AttributeError):
@@ -289,5 +337,14 @@ class ConnectionManager:
         with log_path.open("a") as f:
             for rec in notifications:
                 f.write(json.dumps(rec) + "\n")
+            if cap_hit:
+                f.write(json.dumps({
+                    "timestamp": datetime.now(timezone.utc).isoformat(
+                        timespec="milliseconds"
+                    ),
+                    "uuid": char_uuid,
+                    "event": "cap_hit",
+                    "cap": self.MAX_NOTIFICATIONS,
+                }) + "\n")
 
         return notifications

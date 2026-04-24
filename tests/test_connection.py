@@ -253,3 +253,59 @@ class TestSubscribeNotify:
         assert log_path.exists()
         lines = log_path.read_text().strip().split("\n")
         assert len(lines) == 2
+
+    @pytest.mark.asyncio
+    async def test_notifications_capped(
+        self, manager, engagements_dir, mock_bleak_client
+    ):
+        async def _fake_start_notify(char_uuid, callback):
+            for _ in range(ConnectionManager.MAX_NOTIFICATIONS + 50):
+                callback(0, bytearray(b"\x00"))
+
+        mock_bleak_client.start_notify = _fake_start_notify
+        mock_bleak_client.stop_notify = AsyncMock()
+
+        with patch("ble_mcp.connection.BleakClient", return_value=mock_bleak_client):
+            conn_id = await manager.connect("AA:BB:CC:DD:EE:FF", "chatty")
+
+        with patch("ble_mcp.connection.asyncio.sleep", new_callable=AsyncMock):
+            notifications = await manager.subscribe_notify(
+                conn_id, "00002a37-0000-1000-8000-00805f9b34fb", duration=1.0
+            )
+
+        assert len(notifications) == ConnectionManager.MAX_NOTIFICATIONS
+        eng_folder = list(engagements_dir.iterdir())[0]
+        log_text = (eng_folder / "logs" / "ble-notifications.jsonl").read_text()
+        assert '"event": "cap_hit"' in log_text
+
+
+class TestResourceCaps:
+    @pytest.mark.asyncio
+    async def test_scan_duration_clamped(self, manager):
+        captured = {}
+
+        async def _fake_discover(timeout, return_adv):
+            captured["timeout"] = timeout
+            return {}
+
+        with patch(
+            "ble_mcp.connection.BleakScanner.discover",
+            new=_fake_discover,
+        ):
+            await manager.scan(duration=9999.0)
+
+        assert captured["timeout"] == ConnectionManager.MAX_DURATION_SECONDS
+
+    @pytest.mark.asyncio
+    async def test_connection_limit(self, manager):
+        # Pre-populate with MAX_CONNECTIONS placeholders
+        for i in range(ConnectionManager.MAX_CONNECTIONS):
+            manager._connections[f"c{i}"] = MagicMock()
+
+        mock_client = AsyncMock()
+        mock_client.is_connected = True
+        with patch("ble_mcp.connection.BleakClient", return_value=mock_client):
+            conn_id = await manager.connect("AA:BB:CC:DD:EE:FF", "over-limit")
+
+        assert conn_id is None
+        mock_client.connect.assert_not_called()
