@@ -33,11 +33,21 @@ app = Server("ble-mcp")
 connection_manager = ConnectionManager(engagements_dir=ENGAGEMENTS_DIR)
 
 
+# Duration class convention (consistent across pidev-sec tool MCPs):
+#   instant    -- <1 s wall clock, foregroundable always
+#   fast       -- 1-10 s, foregroundable
+#   slow       -- 10 s-2 min, background-dispatch recommended
+#   very-slow  -- >2 min, background-dispatch effectively required
+
+
 TOOL_DEFINITIONS = [
     Tool(
         name="scan_devices",
         description=(
-            "Scan for nearby BLE devices and return a list sorted by RSSI. [read-only]"
+            "Scan for nearby BLE devices and return a list sorted by RSSI. "
+            "[read-only] [Duration: parameterized by duration_s (default 10 s -- "
+            "slow). Background-dispatch recommended if you need to do anything "
+            "else during the scan window.]"
         ),
         inputSchema={
             "type": "object",
@@ -59,7 +69,8 @@ TOOL_DEFINITIONS = [
         name="monitor_advertisements",
         description=(
             "Monitor BLE advertisements for a fixed duration and return timestamped "
-            "records. [read-only]"
+            "records. [read-only] [Duration: parameterized by duration_s (default "
+            "30 s -- slow). Background-dispatch recommended.]"
         ),
         inputSchema={
             "type": "object",
@@ -81,7 +92,10 @@ TOOL_DEFINITIONS = [
         name="connect",
         description=(
             "Connect to a BLE device by address and create an engagement folder. "
-            "Returns a connection_id for subsequent calls. [allowed-write]"
+            "Returns a connection_id for subsequent calls. "
+            "[allowed-write] [Duration: fast (~1-3 s for a clean connect; longer "
+            "on flaky links). Lifecycle: persistent -- the BLE connection holds "
+            "until disconnect is called or the peer drops.]"
         ),
         inputSchema={
             "type": "object",
@@ -104,7 +118,10 @@ TOOL_DEFINITIONS = [
     ),
     Tool(
         name="disconnect",
-        description="Disconnect a BLE device by connection ID. [allowed-write]",
+        description=(
+            "Disconnect a BLE device by connection ID. "
+            "[allowed-write] [Duration: instant (~0.5 s).]"
+        ),
         inputSchema={
             "type": "object",
             "properties": {
@@ -120,7 +137,9 @@ TOOL_DEFINITIONS = [
         name="enumerate_services",
         description=(
             "Walk GATT services and characteristics for a connected device. "
-            "Saves results to logs/ble-gatt.json. [read-only]"
+            "Saves results to logs/ble-gatt.json. "
+            "[read-only] [Duration: slow (~5-20 s depending on service tree size). "
+            "Foregroundable; background only if you need parallel work meanwhile.]"
         ),
         inputSchema={
             "type": "object",
@@ -137,7 +156,7 @@ TOOL_DEFINITIONS = [
         name="read_characteristic",
         description=(
             "Read a single GATT characteristic by UUID. Returns hex, text, and raw "
-            "representations. [read-only]"
+            "representations. [read-only] [Duration: fast (~0.5-2 s per read).]"
         ),
         inputSchema={
             "type": "object",
@@ -158,7 +177,10 @@ TOOL_DEFINITIONS = [
         name="subscribe_notify",
         description=(
             "Subscribe to GATT notifications for a characteristic for a fixed duration. "
-            "Saves records to logs/ble-notifications.jsonl. [allowed-write]"
+            "Saves records to logs/ble-notifications.jsonl. "
+            "[allowed-write] [Duration: parameterized by duration_s (default 30 s -- "
+            "slow). Background-dispatch recommended; the main agent can do other work "
+            "while notifications are collecting.]"
         ),
         inputSchema={
             "type": "object",
