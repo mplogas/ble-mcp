@@ -145,6 +145,66 @@ class TestConnect:
         assert not engagements_dir.exists() or not list(engagements_dir.iterdir())
 
 
+class TestConnectEngagementPath:
+    """The engagement_path branch: write into <engagement_path>/ble, but only
+    for a true subdirectory of the engagements root."""
+
+    @pytest.mark.asyncio
+    async def test_valid_subdir_writes_into_ble_subfolder(
+        self, manager, engagements_dir
+    ):
+        eng_path = engagements_dir / "25-03-2026-10-00_PROJECT_smart-lock"
+        mock_client = AsyncMock()
+        mock_client.is_connected = True
+        with patch(
+            "ble_mcp.connection.BleakClient", return_value=mock_client
+        ):
+            conn_id = await manager.connect(
+                "AA:BB:CC:DD:EE:FF", "smart-lock", engagement_path=str(eng_path)
+            )
+
+        assert conn_id is not None
+        # Output lands under <engagement_path>/ble, not a fresh dated folder
+        ble_dir = eng_path / "ble"
+        assert (ble_dir / "logs").is_dir()
+        assert (ble_dir / "artifacts").is_dir()
+        assert (ble_dir / "config.json").exists()
+        # No fresh dated _BLE_ folder was created alongside it
+        assert [p.name for p in engagements_dir.iterdir()] == [eng_path.name]
+
+    @pytest.mark.asyncio
+    async def test_engagements_root_itself_rejected(self, manager, engagements_dir):
+        mock_client = AsyncMock()
+        mock_client.is_connected = True
+        with patch(
+            "ble_mcp.connection.BleakClient", return_value=mock_client
+        ):
+            with pytest.raises(ValueError, match="subdirectory"):
+                await manager.connect(
+                    "AA:BB:CC:DD:EE:FF",
+                    "smart-lock",
+                    engagement_path=str(engagements_dir),
+                )
+        # Rejected before connecting; no dir created
+        mock_client.connect.assert_not_called()
+        assert not engagements_dir.exists() or not list(engagements_dir.iterdir())
+
+    @pytest.mark.asyncio
+    async def test_out_of_tree_path_rejected(self, manager, engagements_dir, tmp_path):
+        outside = tmp_path / "somewhere-else" / "engagement"
+        mock_client = AsyncMock()
+        mock_client.is_connected = True
+        with patch(
+            "ble_mcp.connection.BleakClient", return_value=mock_client
+        ):
+            with pytest.raises(ValueError, match="subdirectory"):
+                await manager.connect(
+                    "AA:BB:CC:DD:EE:FF", "smart-lock", engagement_path=str(outside)
+                )
+        mock_client.connect.assert_not_called()
+        assert not outside.exists()
+
+
 class TestDisconnect:
     @pytest.mark.asyncio
     async def test_disconnects_and_removes(self, manager):
