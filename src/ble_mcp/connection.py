@@ -140,7 +140,7 @@ class ConnectionManager:
         self,
         address: str,
         engagement_name: str,
-        project_path: str | None = None,
+        engagement_path: str | None = None,
     ) -> str | None:
         """Connect to a BLE device, create engagement folder. Returns conn_id or None.
 
@@ -158,10 +158,13 @@ class ConnectionManager:
         sanitized = _sanitize_name(engagement_name)
         timestamp = datetime.now().strftime("%d-%m-%Y-%H-%M")
 
-        if project_path is not None:
-            resolved = Path(project_path).resolve()
-            if not resolved.is_relative_to(self._engagements_dir.resolve()):
-                raise ValueError("project_path must be under engagements directory")
+        if engagement_path is not None:
+            resolved = Path(engagement_path).resolve()
+            root = self._engagements_dir.resolve()
+            if not resolved.is_relative_to(root) or resolved == root:
+                raise ValueError(
+                    "engagement_path must be a subdirectory under the engagements directory"
+                )
             engagement_path = resolved / "ble"
         else:
             folder_name = f"{timestamp}_BLE_{sanitized}"

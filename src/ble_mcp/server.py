@@ -108,9 +108,9 @@ TOOL_DEFINITIONS = [
                     "type": "string",
                     "description": "Target device or engagement name used for the folder",
                 },
-                "project_path": {
+                "engagement_path": {
                     "type": "string",
-                    "description": "Path to a project folder (from project-mcp). If provided, writes to <project_path>/ble/ instead of creating a standalone engagement.",
+                    "description": "Path to an engagement folder (from project-mcp). If provided, writes to <engagement_path>/ble/ instead of creating a standalone engagement.",
                 },
             },
             "required": ["address", "engagement_name"],
@@ -212,6 +212,10 @@ async def list_tools():
 
 @app.call_tool()
 async def call_tool(name: str, arguments: dict) -> list[TextContent]:
+    if name == "connect" and "project_path" in arguments:
+        return [TextContent(type="text", text=json.dumps(
+            {"error": "project_path was renamed to engagement_path in v0.3; "
+                      "pass engagement_path instead.", "tool": name}, indent=2))]
     tier = classify_tool(name)
     logger.info("tool=%s tier=%s args=%s", name, tier.value, arguments)
 
@@ -251,7 +255,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 manager=connection_manager,
                 address=arguments["address"],
                 engagement_name=arguments["engagement_name"],
-                project_path=arguments.get("project_path"),
+                engagement_path=arguments.get("engagement_path"),
             )
 
         elif name == "disconnect":
