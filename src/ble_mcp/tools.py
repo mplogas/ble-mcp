@@ -47,7 +47,11 @@ async def tool_connect(
 ) -> dict[str, Any]:
     """Connect to a BLE device and create an engagement folder."""
     try:
-        conn_id = await manager.connect(address=address, engagement_name=engagement_name, engagement_path=engagement_path)
+        conn_id = await manager.connect(
+            address=address,
+            engagement_name=engagement_name,
+            engagement_path=engagement_path,
+        )
     except Exception as exc:
         return {"error": str(exc)}
     if conn_id is None:

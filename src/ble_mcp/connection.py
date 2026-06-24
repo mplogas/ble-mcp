@@ -160,8 +160,11 @@ class ConnectionManager:
 
         if engagement_path is not None:
             resolved = Path(engagement_path).resolve()
-            if not resolved.is_relative_to(self._engagements_dir.resolve()):
-                raise ValueError("engagement_path must be under engagements directory")
+            root = self._engagements_dir.resolve()
+            if not resolved.is_relative_to(root) or resolved == root:
+                raise ValueError(
+                    "engagement_path must be a subdirectory under the engagements directory"
+                )
             engagement_path = resolved / "ble"
         else:
             folder_name = f"{timestamp}_BLE_{sanitized}"
